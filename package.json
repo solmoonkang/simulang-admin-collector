@@ -1,0 +1,16 @@
+{
+  "name": "simulang-admin-collector",
+  "version": "1.0.0",
+  "description": "Simulang(macOS GUI 자동화) 기반 관리자 콘솔 데이터 수집기 — 접근성 트리 / 개발자도구 / 비전(OCR) 3방식",
+  "type": "module",
+  "scripts": {
+    "login": "node --env-file=.env login-tree.mjs",
+    "tree": "node --env-file=.env collect-tree.mjs",
+    "vision": "node --env-file=.env collect-vision.mjs",
+    "devtools": "node --env-file=.env collect-devtools.mjs"
+  },
+  "dependencies": {
+    "@simular-ai/simulang-js": "^8.0.0",
+    "tesseract.js": "^7.0.0"
+  }
+}
