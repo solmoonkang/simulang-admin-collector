@@ -1,10 +1,11 @@
 // ③ 비전(스크린샷+OCR) 방식 — 트리/API가 없는 화면용 폴백
 // 표 페이지를 스크롤하며 캡처 → tesseract OCR → 행 식별자(ROW_ANCHOR)로 중복제거 → Qwen(로컬)으로 구조화
 // 칼럼/행식별 패턴/데이터 경로는 .env 에서 사이트별로 지정한다. 정확도는 트리/개발자도구보다 낮다.
-import { ocr, sleep, mouse, gotoUrl } from './lib.mjs';
+import { ocr } from './ocr-lib.mjs';
+import { sleep, mouse, gotoUrl } from '../lib.mjs';
 import { screenshotFull, Screen } from '@simular-ai/simulang-js';
-import { loginViaTree } from './login-tree.mjs';
-import { BASE_URL, DATA_PATH, COLUMNS, ROW_ANCHOR, OUTPUT_DIR } from './config.mjs';
+import { loginViaTree } from '../login-tree.mjs';
+import { BASE_URL, DATA_PATH, COLUMNS, ROW_ANCHOR, OUTPUT_DIR } from '../config.mjs';
 import { execSync } from 'node:child_process';
 import { createWorker } from 'tesseract.js';
 import fs from 'node:fs';

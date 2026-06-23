@@ -1,8 +1,8 @@
 // 공용 유틸: 사람처럼 움직이는 마우스/스크롤, 스크린샷+OCR, 좌표변환, 입력
 import { execSync } from 'node:child_process';
+import fs from 'node:fs';
 import {
-  MouseController, KeyboardController, Screen, screenshotFull,
-  ScreenshotCoordinateType, Button, Coordinate, Direction, Key,
+  MouseController, KeyboardController, Button, Coordinate, Direction, Key,
 } from '@simular-ai/simulang-js';
 
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -78,31 +78,6 @@ export async function humanScroll(totalY) {
   }
 }
 
-// 전체 화면 캡처 → PNG 저장. {shot, path, w, h}
-export function capture(path) {
-  const shot = screenshotFull(false, Screen.mainScreen());
-  shot.save(path);
-  const [w, h] = shot.dimensions;
-  return { shot, path, w, h };
-}
-
-// OCR: PNG 경로 → tesseract worker로 단어+bbox 추출 (v7은 blocks:true 필요)
-export async function ocr(worker, path) {
-  const { data } = await worker.recognize(path, {}, { blocks: true });
-  const words = [];
-  for (const b of data.blocks ?? [])
-    for (const p of b.paragraphs ?? [])
-      for (const l of p.lines ?? [])
-        for (const w of l.words ?? [])
-          words.push({ text: w.text, bbox: w.bbox, conf: w.confidence });
-  return { text: data.text, words };
-}
-
-// 이미지 픽셀좌표 → 마우스 전역좌표 [gx,gy]
-export function toMouse(shot, ix, iy) {
-  return shot.toGlobalDesktopCoordinates(ix, iy, ScreenshotCoordinateType.absolute());
-}
-
 // 클립보드 경유 붙여넣기(한글/React 입력 안정성)
 export function pasteText(text) {
   execSync('pbcopy', { input: text });
@@ -116,4 +91,41 @@ export function activateChrome() { execSync(`osascript -e 'tell application "Goo
 // 크롬 active 탭 URL 이동(키보드 네비게이션보다 안정적)
 export function gotoUrl(url) {
   execSync(`osascript -e 'tell application "Google Chrome" to set URL of active tab of front window to ${JSON.stringify(url)}'`);
+}
+
+const hostOf = (u) => { try { return new URL(u).host; } catch { return u; } };
+
+// 대상 사이트 탭을 '1개'만 남기고 정리한 뒤 그 탭을 재사용해 이동한다.
+// (같은 호스트의 중복 탭만 닫으므로 노션 등 다른 탭은 보존된다 → 새 탭 누적 방지)
+export function focusSiteTab(url) {
+  const host = hostOf(url);
+  const script = `tell application "Google Chrome"
+  if (count of windows) = 0 then make new window
+  set theWin to front window
+  set keepIdx to 0
+  set toClose to {}
+  repeat with i from 1 to (count of tabs of theWin)
+    if (URL of tab i of theWin) contains "${host}" then
+      if keepIdx = 0 then
+        set keepIdx to i
+      else
+        set end of toClose to i
+      end if
+    end if
+  end repeat
+  repeat with k from (count of toClose) to 1 by -1
+    close tab (item k of toClose) of theWin
+  end repeat
+  if keepIdx = 0 then
+    make new tab at end of tabs of theWin with properties {URL:"${url}"}
+    set active tab index of theWin to (count of tabs of theWin)
+  else
+    set active tab index of theWin to keepIdx
+    set URL of active tab of theWin to "${url}"
+  end if
+  activate
+end tell`;
+  const f = `/tmp/focus-tab-${process.pid}.scpt`;
+  fs.writeFileSync(f, script);
+  try { execSync(`osascript ${f}`); } finally { fs.unlinkSync(f); }
 }

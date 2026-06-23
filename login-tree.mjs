@@ -1,8 +1,7 @@
 // 접근성 트리로 로그인 (setValue/activate) — 가장 안정적
 // 로그인 폼의 셀렉터(SEL_*)는 .env 에서 사이트별로 지정한다.
 import { enableAccessibilityForFrontmostApp, AccessibilityTree } from '@simular-ai/simulang-js';
-import { execSync } from 'node:child_process';
-import { sleep, activateChrome } from './lib.mjs';
+import { sleep, activateChrome, focusSiteTab } from './lib.mjs';
 import { BASE_URL, LOGIN_ID, LOGIN_PW, SEL } from './config.mjs';
 
 const lct = (n) => (n.localizedControlType || '').trim();
@@ -13,7 +12,7 @@ function findAll(root, pred) {
 }
 
 export async function loginViaTree() {
-  execSync(`open ${JSON.stringify(BASE_URL + '/login')}`);
+  focusSiteTab(BASE_URL + '/login');   // 같은 사이트 탭을 재사용(새 탭 누적 방지)
   activateChrome();
   await sleep(5000);
   enableAccessibilityForFrontmostApp();
@@ -24,6 +23,11 @@ export async function loginViaTree() {
   const idField  = findAll(root, (n) => n.refId != null && n.name === SEL.idName && lct(n) !== '텍스트')[0];
   const pwField  = findAll(root, (n) => n.refId != null && lct(n) === SEL.pwType)[0];
   const loginBtn = findAll(root, (n) => n.refId != null && n.name === SEL.btnName)[0];
+  if (!(idField && pwField || loginBtn)) {
+    // 로그인 폼도 없고 로그인 버튼도 없음 → 이미 로그인된 세션으로 간주(멱등)
+    console.log('ℹ️ 로그인 폼이 없습니다 — 이미 로그인된 상태로 간주하고 진행');
+    return;
+  }
   if (!(idField && pwField && loginBtn)) throw new Error('로그인 폼 요소를 트리에서 찾지 못함 (.env 의 SEL_* 확인)');
 
   tree.setValue(idField.refId, LOGIN_ID); await sleep(600);

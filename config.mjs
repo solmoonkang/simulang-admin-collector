@@ -18,6 +18,8 @@ export const SEL = {
 // ── 수집 대상 (사이트마다 다름) ──
 export const MENUS     = (process.env.MENUS || '').split(',').map((s) => s.trim()).filter(Boolean);
 export const DATA_PATH = process.env.DATA_PATH || '/';     // 표 데이터가 있는 경로
+// 수집에서 제외할 탭 이름 (예: 시크릿/연동키가 노출되는 '설정' 탭)
+export const SKIP_TABS = (process.env.SKIP_TABS || '').split(',').map((s) => s.trim()).filter(Boolean);
 
 // ── 비전(표 OCR) 방식 설정 ──
 export const COLUMNS    = (process.env.COLUMNS || '').split(',').map((s) => s.trim()).filter(Boolean);
