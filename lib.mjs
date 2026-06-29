@@ -7,16 +7,28 @@ import {
 
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 export const rand = () => Math.random();
-const ease = (t) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2); // 가속→감속
+// const ease = (t) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2); // (원본) 약한 가속→감속
+const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2); // 학습반영: 더 강한 가속→감속(중간 빠름=속도 편차↑)
 
 export const mouse = new MouseController();
 export const kb = new KeyboardController();
 
+// --- dry-run(테스트) 모드 ---------------------------------------------------
+// setTraceSink(fn) 을 설정하면 실제 마우스를 움직이지 않고, 생성한 각 점을
+// fn({x,y,dt,pause}) 로 흘려보낸다. 시작 좌표는 실제 커서 대신 가상 커서로 추적.
+let traceSink = null, traceCursor = null;
+export function setTraceSink(fn, start = null) { traceSink = fn; traceCursor = start; }
+const curPos = () => (traceSink && traceCursor ? traceCursor : mouse.location());
+
 // --- 한 획(stroke): 곡선 + 좌우 흔들림 + 중간 멈칫 ---
 async function moveStroke(tx, ty, allowPause) {
-  const [sx, sy] = mouse.location();
+  const [sx, sy] = curPos();
   const dist = Math.hypot(tx - sx, ty - sy) || 1;
-  const detour = Math.max(dist * 0.5, 55) * (0.4 + rand() * 0.7);  // 우회 곡률
+  // const detour = Math.max(dist * 0.5, 55) * (0.4 + rand() * 0.7);  // (원본) 매번 크게 우회
+  // 학습반영: 평소엔 거의 직선(직진도 ~0.96), 25%만 크게 휨(직진도 ~0.5)
+  const detour = rand() < 0.25
+    ? Math.max(dist * (0.18 + rand() * 0.28), 30)   // 가끔 크게 우회
+    : dist * (0.02 + rand() * 0.07);                // 평소 거의 직선
   const side = rand() < 0.5 ? 1 : -1;
   const nx = (-(ty - sy) / dist) * side, ny = ((tx - sx) / dist) * side; // 진행방향 수직
   const cx = (sx + tx) / 2 + nx * detour, cy = (sy + ty) / 2 + ny * detour;
@@ -30,19 +42,27 @@ async function moveStroke(tx, ty, allowPause) {
     const w = Math.sin(t * waveFreq + wavePh) * waveAmp * (1 - t); // 좌우 흔들림
     x += nx * w; y += ny * w;
     x += (rand() - 0.5) * 1.6; y += (rand() - 0.5) * 1.6;          // 미세 떨림
-    mouse.moveMouse(Math.round(x), Math.round(y), Coordinate.Abs);
     let d = 8 + rand() * 13;
     if (t < 0.15 || t > 0.85) d += 4 + rand() * 9; // 시작/끝 더 느리게
-    await sleep(d);
-    if (i === pauseAt) await sleep(130 + rand() * 280); // 가다가 한 번 멈칫
+    // 멈칫: 12% 확률 긴 멈칫(~800~1200ms) / 그 외 130~410ms  (원본: 130 + rand*280)
+    const pauseMs = (i === pauseAt) ? (rand() < 0.12 ? 800 + rand() * 400 : 130 + rand() * 280) : 0;
+    const px = Math.round(x), py = Math.round(y);
+    if (traceSink) {
+      traceSink({ x: px, y: py, dt: d, pause: pauseMs });   // dry-run: 점만 기록
+    } else {
+      mouse.moveMouse(px, py, Coordinate.Abs);
+      await sleep(d);
+      if (pauseMs) await sleep(pauseMs);
+    }
   }
+  if (traceSink) traceCursor = [tx, ty];   // 가상 커서를 목표로 이동
 }
 
 // 사람처럼: 곡선 + 흔들림 + 멈칫 + 가끔 목표를 지나쳤다 되돌아오는 보정
 export async function humanMove(tx, ty, doClick = true) {
   const wps = [];
   if (rand() < 0.5) { // overshoot 후 보정
-    const [sx, sy] = mouse.location();
+    const [sx, sy] = curPos();
     const d = Math.hypot(tx - sx, ty - sy) || 1;
     wps.push([Math.round(tx + ((tx - sx) / d) * (8 + rand() * 18)),
               Math.round(ty + ((ty - sy) / d) * (8 + rand() * 18))]);
@@ -50,8 +70,9 @@ export async function humanMove(tx, ty, doClick = true) {
   wps.push([tx, ty]);
   for (let i = 0; i < wps.length; i++) {
     await moveStroke(wps[i][0], wps[i][1], i === 0);
-    if (i < wps.length - 1) await sleep(70 + rand() * 150);
+    if (i < wps.length - 1 && !traceSink) await sleep(70 + rand() * 150);
   }
+  if (traceSink) return;                 // dry-run: 클릭/망설임 생략
   await sleep(90 + rand() * 170); // 클릭 전 망설임
   if (doClick) mouse.button(Button.Left, Direction.Click);
 }
